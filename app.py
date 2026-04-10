@@ -558,15 +558,23 @@ def _claim_intake(intake_id: int, distributor_name: str) -> bool:
     try:
         import psycopg2
         now = datetime.now(timezone.utc).isoformat()
-        with psycopg2.connect(DATABASE_URL) as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE client_intake
-                    SET claimed_by = %s, claimed_at = %s
-                    WHERE id = %s AND claimed_by IS NULL
-                """, (distributor_name, now, intake_id))
+        conn = psycopg2.connect(DATABASE_URL)
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE client_intake
+                SET claimed_by = %s, claimed_at = %s
+                WHERE id = %s AND claimed_by IS NULL
+            """, (distributor_name, now, intake_id))
             conn.commit()
-        return True
+            updated = cur.rowcount
+            cur.close()
+            conn.close()
+            return updated > 0
+        except Exception:
+            conn.rollback()
+            conn.close()
+            raise
     except Exception as e:
         st.error(f"Claim error: {e}")
         return False
