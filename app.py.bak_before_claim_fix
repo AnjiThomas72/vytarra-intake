@@ -595,8 +595,8 @@ def _render_intake_card(row, distributor_name: str):
     btn_key = f"claim_{row['id']}"
     if st.button(f"✅ Claim {row['first_name']} {row['last_name']}", key=btn_key, type="primary"):
         if _claim_intake(row['id'], distributor_name):
-            st.session_state["claimed_client"] = row
-            st.rerun()
+            st.success(f"Claimed! You now own {row['first_name']} {row['last_name']}'s intake.")
+            st.balloons()
         else:
             st.error("Could not claim. It may have already been claimed.")
 
@@ -638,35 +638,6 @@ def render_distributor_page():
 
     distributor_name = st.session_state["dist_name"]
     st.caption(f"Logged in as: {distributor_name}")
-
-    # Show claimed client confirmation
-    claimed = st.session_state.get("claimed_client")
-    if claimed:
-        yn = lambda v: "Yes" if v else "No"
-        st.success(f"✅ Claimed: {claimed['first_name']} {claimed['last_name']}")
-        st.balloons()
-        st.markdown('<p class="section-header">Client Details</p>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write(f"📧 Email: {claimed.get('email', '—')}")
-            st.write(f"📞 Phone: {claimed.get('phone', '—')}")
-            st.write(f"🎂 DOB: {claimed.get('date_of_birth', '—')}")
-            st.write(f"📏 Height: {claimed.get('height_cm', '—')} cm")
-            st.write(f"⚖️ Weight: {claimed.get('weight_kg', '—')} kg")
-        with c2:
-            st.write(f"1. Pacemaker: {yn(claimed.get('has_pacemaker'))}")
-            st.write(f"2. Health conditions: {yn(claimed.get('has_conditions'))}")
-            st.write(f"3. Medications: {yn(claimed.get('takes_medications'))}")
-            st.write(f"4. Recent procedures: {yn(claimed.get('recent_procedures'))}")
-            st.write(f"5. Smokes/Drinks: {yn(claimed.get('smokes_or_drinks'))}")
-        concerns = claimed.get('health_concerns', '').strip()
-        if concerns:
-            st.write(f"💬 Health concerns: {concerns}")
-        st.divider()
-        if st.button("🔍 Search Another Client", type="primary", key="search_another"):
-            st.session_state.pop("claimed_client", None)
-            st.rerun()
-        return
 
     # Search
     search = st.text_input("🔍 Search client by name", key="dist_search")
