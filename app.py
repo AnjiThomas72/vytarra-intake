@@ -694,10 +694,10 @@ def render_distributor_page():
 
     # Persist search results in session state so they survive reruns
     if search_clicked and search.strip():
-        st.session_state["dist_results"] = _search_unclaimed(search)
+        st.session_state["dist_results"] = [dict(r) for r in _search_unclaimed(search)]
         st.session_state["dist_search_term"] = search
     elif show_all:
-        st.session_state["dist_results"] = _fetch_all_unclaimed()
+        st.session_state["dist_results"] = [dict(r) for r in _fetch_all_unclaimed()]
         st.session_state["dist_search_term"] = "all"
 
     rows = st.session_state.get("dist_results", [])
