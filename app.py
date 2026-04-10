@@ -14,6 +14,11 @@ from streamlit_drawable_canvas import st_canvas
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_PATH = BASE_DIR / "assets" / "logo.png"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if not DATABASE_URL:
+    try:
+        DATABASE_URL = st.secrets["DATABASE_URL"]
+    except Exception:
+        pass
 
 st.set_page_config(
     page_title="VYTARRA™ Intake",
@@ -70,6 +75,22 @@ st.markdown("""
         color: #1f4e79;
         font-size: 14px;
         margin-bottom: 4px;
+    }
+    .intake-title {
+        color: #1f4e79;
+        font-size: 26px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        text-align: center;
+        margin-top: 16px;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #5a8a5a;
+    }
+    /* Shrink the metric (cm / kg) values */
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -291,7 +312,7 @@ def render_intake_page():
         with col_c:
             st.image(str(LOGO_PATH), width=220)
 
-    st.markdown(f'<p class="section-header">🩺 {t("intake_title")}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="intake-title">🩺 {t("intake_title")}</p>', unsafe_allow_html=True)
 
     # Personal Information
     st.markdown(f'<p class="section-header">{t("personal_info")}</p>', unsafe_allow_html=True)
