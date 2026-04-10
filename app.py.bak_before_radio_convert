@@ -287,9 +287,11 @@ def render_intake_page():
         st.rerun()
 
     if LOGO_PATH.exists():
+        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         col_l, col_c, col_r = st.columns([1, 2, 1])
         with col_c:
             st.image(str(LOGO_PATH), width=220)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown(f'<p class="section-header">🩺 {t("intake_title")}</p>', unsafe_allow_html=True)
 
@@ -409,9 +411,7 @@ def render_compliance_page():
         st.rerun()
 
     if LOGO_PATH.exists():
-        col_l, col_c, col_r = st.columns([1, 2, 1])
-        with col_c:
-            st.image(str(LOGO_PATH), width=220)
+        st.image(str(LOGO_PATH), width=220)
 
     st.markdown(f'<p class="section-header">📋 {t("compliance_title")}</p>', unsafe_allow_html=True)
 
@@ -458,9 +458,7 @@ def render_compliance_page():
 # -----------------------------
 def render_success_page():
     if LOGO_PATH.exists():
-        col_l, col_c, col_r = st.columns([1, 2, 1])
-        with col_c:
-            st.image(str(LOGO_PATH), width=220)
+        st.image(str(LOGO_PATH), width=220)
     st.success(t("success"))
     st.balloons()
 
