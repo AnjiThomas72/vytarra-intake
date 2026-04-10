@@ -552,29 +552,25 @@ def _fetch_all_unclaimed() -> list:
         return []
 
 
-def _claim_intake(intake_id: int, distributor_name: str) -> bool:
+def _claim_intake(intake_id, distributor_name: str) -> bool:
     if not DATABASE_URL:
+        st.error("No DATABASE_URL")
         return False
     try:
         import psycopg2
         now = datetime.now(timezone.utc).isoformat()
         conn = psycopg2.connect(DATABASE_URL)
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE client_intake
-                SET claimed_by = %s, claimed_at = %s
-                WHERE id = %s AND claimed_by IS NULL
-            """, (distributor_name, now, intake_id))
-            conn.commit()
-            updated = cur.rowcount
-            cur.close()
-            conn.close()
-            return updated > 0
-        except Exception:
-            conn.rollback()
-            conn.close()
-            raise
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE client_intake
+            SET claimed_by = %s, claimed_at = %s
+            WHERE id = %s AND claimed_by IS NULL
+        """, (str(distributor_name), str(now), int(intake_id)))
+        conn.commit()
+        updated = cur.rowcount
+        cur.close()
+        conn.close()
+        return updated > 0
     except Exception as e:
         st.error(f"Claim error: {e}")
         return False
