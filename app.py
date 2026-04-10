@@ -1,10 +1,12 @@
 from __future__ import annotations
 import os
 import json
+import base64
 from datetime import datetime, timezone
 from pathlib import Path
 
 import streamlit as st
+from streamlit_drawable_canvas import st_canvas
 
 # -----------------------------
 # Config
@@ -14,9 +16,9 @@ LOGO_PATH = BASE_DIR / "assets" / "logo.png"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 st.set_page_config(
-    page_title="VYTARRA™",
+    page_title="VYTARRA™ Intake",
     page_icon="🟢",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="collapsed",
 )
 
@@ -34,24 +36,40 @@ st.markdown("""
         min-height: 100vh;
         font-family: 'Inter', sans-serif;
     }
-    .landing-card {
-        background: rgba(255,255,255,0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 40px;
-        margin: 20px auto;
-        max-width: 500px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-        text-align: center;
-    }
     .intake-card {
         background: rgba(255,255,255,0.95);
         backdrop-filter: blur(10px);
         border-radius: 20px;
         padding: 30px 40px;
         margin: 20px auto;
-        max-width: 650px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    }
+    .section-header {
+        color: #1f4e79;
+        font-size: 18px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 16px;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #5a8a5a;
+    }
+    .compliance-text {
+        background: #f8fafb;
+        border-left: 4px solid #1f4e79;
+        border-radius: 10px;
+        padding: 16px 20px;
+        margin: 12px 0;
+        font-size: 13px;
+        line-height: 1.7;
+        color: #1a1a2e;
+    }
+    .sig-label {
+        font-weight: 700;
+        color: #1f4e79;
+        font-size: 14px;
+        margin-bottom: 4px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -88,6 +106,8 @@ def _ensure_intake_table():
                         recent_procedures BOOLEAN DEFAULT FALSE,
                         smokes_or_drinks BOOLEAN DEFAULT FALSE,
                         health_concerns TEXT,
+                        intake_signature TEXT,
+                        compliance_signature TEXT,
                         claimed_by TEXT,
                         claimed_at TEXT,
                         created_at TEXT NOT NULL,
@@ -114,8 +134,9 @@ def save_intake(data: dict) -> bool:
                         date_of_birth, weight_kg, height_cm,
                         has_pacemaker, has_conditions, takes_medications,
                         recent_procedures, smokes_or_drinks,
-                        health_concerns, created_at, lang
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        health_concerns, intake_signature, compliance_signature,
+                        created_at, lang
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     data["first_name"], data["last_name"], data["full_name"],
                     data["email"], data.get("phone", ""),
@@ -123,6 +144,7 @@ def save_intake(data: dict) -> bool:
                     data.get("pacemaker", False), data.get("conditions", False),
                     data.get("medications", False), data.get("procedures", False),
                     data.get("smokes", False), data.get("health_concerns", ""),
+                    data.get("intake_signature", ""), data.get("compliance_signature", ""),
                     now, data.get("lang", "en"),
                 ))
             conn.commit()
@@ -137,17 +159,13 @@ def save_intake(data: dict) -> bool:
 # -----------------------------
 T = {
     "en": {
-        "welcome": "Welcome to VYTARRA™",
-        "choose": "How can we help you today?",
-        "client_btn": "I'm a Client",
-        "rep_btn": "I'm a Representative",
         "intake_title": "Scanner Intake Form",
         "personal_info": "Personal Information",
         "first_name": "First Name",
         "last_name": "Last Name",
         "email": "E-Mail for Results",
         "phone": "Phone Number",
-        "dob": "Date of Birth",
+        "dob": "Date of Birth (MM/DD/YYYY)",
         "weight": "Weight (kg)",
         "height": "Height (cm)",
         "medical": "Medical Briefing",
@@ -158,27 +176,40 @@ T = {
         "q_smokes": "Do you smoke or consume alcohol regularly?",
         "additional": "Additional Information",
         "health_concerns": "What are your main health concerns or goals for this scan?",
-        "consent": "I agree to the terms of service, and am aware that this scan is an alternative wellness tool and not meant for medical diagnosis.",
+        "signature": "Signature",
+        "sign_here": "Sign below",
+        "intake_consent": "I am aware that it is my duty to submit truthful information. I agree to the terms of service, and am aware that this scan is an alternative wellness tool and not meant for medical diagnosis.",
+        "next_page": "Continue to Compliance Agreement →",
+        "compliance_title": "Compliance and Agreement — Quantum Bio-Resonance Scanner",
+        "compliance_sec1_title": "I. Acknowledgment of Intent and Scope of Use",
+        "compliance_sec1": "By signing this agreement, the Buyer affirms that the Quantum Bio-Resonance Scanner is acquired for personal wellness monitoring, experimental insight, or private holistic practices, and not as a substitute for certified medical diagnostics, prescriptions, or emergency care. Buyer understands that no claims are made by the seller or by Vital Health Global LLC regarding the cure, treatment, or diagnosis of any disease.",
+        "compliance_sec2_title": "II. Non-Medical Device Declaration",
+        "compliance_sec2": "The Buyer fully understands that the product is not classified as a Class I, II, or III medical device under any FDA, COFEPRIS, EMA, or global equivalent medical regulation framework. The scanner operates using proprietary algorithms and frequency analytics that fall under the category of biofeedback wellness tools, and its outcomes are to be interpreted subjectively and with informed discretion.",
+        "compliance_sec3_title": "III. Responsibility and Liability",
+        "compliance_sec3": "The Buyer releases the Seller, Vital Health Global LLC, its affiliates, and technology partners from any and all liability arising from misuse, misinterpretation, or misrepresentation of the scanner's outputs. Buyer agrees not to hold Vital Health or its partners accountable for any wellness decisions, supplement intake, lifestyle changes, or therapeutic pathways chosen post-scan.",
+        "compliance_sec4_title": "IV. Use Certification and Intellectual Handling",
+        "compliance_sec4": "The Buyer acknowledges that the device is best operated by individuals trained in frequency interpretation, energy resonance frameworks, or allied biofield disciplines. Buyer further agrees to abstain from reselling the device with medical promises or unsubstantiated claims and understands that any form of public advertising must state clearly: 'Not a medical device.'",
+        "compliance_sec5_title": "V. Data and Privacy Note",
+        "compliance_sec5": "Any personal scan data collected remains under the sole custodianship of the Buyer unless explicitly shared. The scanner may log session data internally for performance tracking, but this information is never uploaded, harvested, or sold without direct consent.",
+        "compliance_sec6_title": "VI. Final Clause — Informed Autonomy",
+        "compliance_sec6": "The Buyer declares full understanding that this device is a tool for exploration, not a determinant of truth, and enters this agreement with conscious autonomy and sovereign discernment. Vital Health Global LLC disclaims any liability arising from independent usage or interpretations not aligned with its official literature or training guidelines.",
+        "compliance_sign": "By signing below, I agree to all terms above.",
         "submit": "Submit Intake Form",
-        "success": "Thank you! Your intake form has been submitted. Your representative will be with you shortly.",
+        "success": "✅ Thank you! Your intake form has been submitted successfully. Your representative will be with you shortly.",
         "required": "Please fill in your first name, last name, and email.",
-        "consent_required": "Please agree to the terms of service.",
-        "back": "← Back",
+        "sig_required": "Please sign both the intake form and the compliance agreement.",
+        "back": "← Back to Intake Form",
         "lang_toggle": "ES",
-        "rep_redirect": "Representatives, please sign in at the main VYTARRA™ portal.",
+        "today": "Today's Date",
     },
     "es": {
-        "welcome": "Bienvenido a VYTARRA™",
-        "choose": "¿Cómo podemos ayudarle hoy?",
-        "client_btn": "Soy Cliente",
-        "rep_btn": "Soy Representante",
         "intake_title": "Formulario de Ingreso del Escáner",
         "personal_info": "Información Personal",
         "first_name": "Nombre",
         "last_name": "Apellido",
         "email": "Correo Electrónico para Resultados",
         "phone": "Número de Teléfono",
-        "dob": "Fecha de Nacimiento",
+        "dob": "Fecha de Nacimiento (MM/DD/AAAA)",
         "weight": "Peso (kg)",
         "height": "Altura (cm)",
         "medical": "Información Médica",
@@ -189,14 +220,31 @@ T = {
         "q_smokes": "¿Fuma o consume alcohol regularmente?",
         "additional": "Información Adicional",
         "health_concerns": "¿Cuáles son sus principales preocupaciones de salud u objetivos para este escaneo?",
-        "consent": "Acepto los términos de servicio y soy consciente de que este escaneo es una herramienta de bienestar alternativa y no está destinado para diagnóstico médico.",
+        "signature": "Firma",
+        "sign_here": "Firme abajo",
+        "intake_consent": "Soy consciente de que es mi deber enviar información veraz. Acepto los términos de servicio y soy consciente de que este escaneo es una herramienta de bienestar alternativa y no está destinado para diagnóstico médico.",
+        "next_page": "Continuar al Acuerdo de Cumplimiento →",
+        "compliance_title": "Acuerdo de Cumplimiento — Escáner de Bio-Resonancia Cuántica",
+        "compliance_sec1_title": "I. Reconocimiento de Intención y Alcance de Uso",
+        "compliance_sec1": "Al firmar este acuerdo, el Comprador afirma que el Escáner de Bio-Resonancia Cuántica se adquiere para monitoreo personal de bienestar, perspectiva experimental o prácticas holísticas privadas, y no como sustituto de diagnósticos médicos certificados, prescripciones o atención de emergencia.",
+        "compliance_sec2_title": "II. Declaración de Dispositivo No Médico",
+        "compliance_sec2": "El Comprador entiende completamente que el producto no está clasificado como dispositivo médico Clase I, II o III bajo ningún marco regulatorio médico equivalente de la FDA, COFEPRIS, EMA o global.",
+        "compliance_sec3_title": "III. Responsabilidad y Obligación",
+        "compliance_sec3": "El Comprador libera al Vendedor, Vital Health Global LLC, sus afiliados y socios tecnológicos de toda responsabilidad derivada del mal uso, mala interpretación o tergiversación de los resultados del escáner.",
+        "compliance_sec4_title": "IV. Certificación de Uso y Manejo Intelectual",
+        "compliance_sec4": "El Comprador reconoce que el dispositivo es mejor operado por personas capacitadas en interpretación de frecuencias, marcos de resonancia energética o disciplinas de biocampo aliadas.",
+        "compliance_sec5_title": "V. Nota de Datos y Privacidad",
+        "compliance_sec5": "Cualquier dato personal de escaneo recopilado permanece bajo la custodia exclusiva del Comprador a menos que se comparta explícitamente.",
+        "compliance_sec6_title": "VI. Cláusula Final — Autonomía Informada",
+        "compliance_sec6": "El Comprador declara plena comprensión de que este dispositivo es una herramienta de exploración, no un determinante de verdad, y entra en este acuerdo con autonomía consciente y discernimiento soberano.",
+        "compliance_sign": "Al firmar abajo, acepto todos los términos anteriores.",
         "submit": "Enviar Formulario",
-        "success": "¡Gracias! Su formulario ha sido enviado. Su representante estará con usted en breve.",
+        "success": "✅ ¡Gracias! Su formulario ha sido enviado exitosamente. Su representante estará con usted en breve.",
         "required": "Por favor complete su nombre, apellido y correo electrónico.",
-        "consent_required": "Por favor acepte los términos de servicio.",
-        "back": "← Volver",
+        "sig_required": "Por favor firme tanto el formulario de ingreso como el acuerdo de cumplimiento.",
+        "back": "← Volver al Formulario",
         "lang_toggle": "EN",
-        "rep_redirect": "Representantes, por favor inicie sesión en el portal principal de VYTARRA™.",
+        "today": "Fecha de Hoy",
     },
 }
 
@@ -207,137 +255,188 @@ def t(key: str) -> str:
 
 
 # -----------------------------
-# Pages
+# Signature helper
 # -----------------------------
-def show_logo():
+def _has_signature(canvas_result) -> bool:
+    if canvas_result is None or canvas_result.image_data is None:
+        return False
+    import numpy as np
+    alpha = canvas_result.image_data[:, :, 3]
+    return int(alpha.sum()) > 1000
+
+
+def _signature_to_base64(canvas_result) -> str:
+    if canvas_result is None or canvas_result.image_data is None:
+        return ""
+    from PIL import Image
+    import io
+    img = Image.fromarray(canvas_result.image_data.astype("uint8"), "RGBA")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+# -----------------------------
+# Page 1: Intake Form
+# -----------------------------
+def render_intake_page():
+    # Language toggle
+    lang = st.session_state.get("lang", "en")
+    if st.button(t("lang_toggle"), key="lang_btn"):
+        st.session_state["lang"] = "es" if lang == "en" else "en"
+        st.rerun()
+
     if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=250)
+        st.image(str(LOGO_PATH), width=220)
 
+    st.markdown(f'<p class="section-header">🩺 {t("intake_title")}</p>', unsafe_allow_html=True)
 
-def render_landing():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown('<div class="landing-card">', unsafe_allow_html=True)
-        show_logo()
-        st.markdown(f"### {t('welcome')}")
-        st.markdown(f"<p style='color:#555;font-size:16px'>{t('choose')}</p>", unsafe_allow_html=True)
+    # Personal Information
+    st.markdown(f'<p class="section-header">{t("personal_info")}</p>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        first_name = st.text_input(t("first_name"), key="i_first")
+    with c2:
+        last_name = st.text_input(t("last_name"), key="i_last")
 
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button(f"🩺 {t('client_btn')}", use_container_width=True, type="primary", key="landing_client"):
-                st.session_state["page"] = "intake"
-                st.rerun()
-        with c2:
-            if st.button(f"💼 {t('rep_btn')}", use_container_width=True, key="landing_rep"):
-                st.session_state["page"] = "rep"
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+    email = st.text_input(t("email"), key="i_email")
 
+    c3, c4 = st.columns(2)
+    with c3:
+        phone = st.text_input(t("phone"), key="i_phone")
+    with c4:
+        dob = st.text_input(t("dob"), placeholder="MM/DD/YYYY", key="i_dob")
 
-def render_rep_page():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown('<div class="landing-card">', unsafe_allow_html=True)
-        show_logo()
-        st.markdown(f"### 💼 {t('rep_btn')}")
-        st.info(t("rep_redirect"))
-        if st.button(t("back"), key="rep_back"):
-            st.session_state["page"] = "landing"
+    c5, c6 = st.columns(2)
+    with c5:
+        weight = st.text_input(t("weight"), key="i_weight")
+    with c6:
+        height = st.text_input(t("height"), key="i_height")
+
+    st.divider()
+
+    # Medical Briefing
+    st.markdown(f'<p class="section-header">{t("medical")}</p>', unsafe_allow_html=True)
+    pacemaker = st.checkbox(t("q_pacemaker"), key="i_pace")
+    conditions = st.checkbox(t("q_conditions"), key="i_cond")
+    medications = st.checkbox(t("q_medications"), key="i_meds")
+    procedures = st.checkbox(t("q_procedures"), key="i_proc")
+    smokes = st.checkbox(t("q_smokes"), key="i_smoke")
+
+    st.divider()
+
+    # Additional Information
+    st.markdown(f'<p class="section-header">{t("additional")}</p>', unsafe_allow_html=True)
+    health_concerns = st.text_area(t("health_concerns"), key="i_concerns", height=120)
+
+    st.divider()
+
+    # Consent + Signature
+    st.markdown(f'<div class="compliance-text">{t("intake_consent")}</div>', unsafe_allow_html=True)
+
+    st.markdown(f'<p class="sig-label">{t("signature")} — {t("sign_here")}</p>', unsafe_allow_html=True)
+    intake_sig = st_canvas(
+        fill_color="rgba(0, 0, 0, 0)",
+        stroke_width=2,
+        stroke_color="#1b1b1b",
+        background_color="#ffffff",
+        height=120,
+        width=400,
+        drawing_mode="freedraw",
+        key="intake_sig_canvas",
+    )
+
+    st.caption(f"{t('today')}: {datetime.now().strftime('%B %d, %Y')}")
+
+    st.divider()
+
+    if st.button(t("next_page"), type="primary", use_container_width=True, key="next_btn"):
+        if not first_name.strip() or not last_name.strip() or not email.strip():
+            st.error(t("required"))
+        elif not _has_signature(intake_sig):
+            st.warning(t("sig_required"))
+        else:
+            st.session_state["intake_data"] = {
+                "first_name": first_name.strip().title(),
+                "last_name": last_name.strip().title(),
+                "full_name": f"{first_name.strip().title()} {last_name.strip().title()}",
+                "email": email.strip(),
+                "phone": phone.strip(),
+                "dob": dob.strip(),
+                "weight": weight.strip(),
+                "height": height.strip(),
+                "pacemaker": pacemaker,
+                "conditions": conditions,
+                "medications": medications,
+                "procedures": procedures,
+                "smokes": smokes,
+                "health_concerns": health_concerns.strip(),
+                "intake_signature": _signature_to_base64(intake_sig),
+                "lang": st.session_state.get("lang", "en"),
+            }
+            st.session_state["page"] = "compliance"
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_intake_form():
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col2:
-        # Back button and language toggle
-        b1, b2 = st.columns([1, 1])
-        with b1:
-            if st.button(t("back"), key="intake_back"):
-                st.session_state["page"] = "landing"
+# -----------------------------
+# Page 2: Compliance Agreement
+# -----------------------------
+def render_compliance_page():
+    if st.button(t("back"), key="comp_back"):
+        st.session_state["page"] = "intake"
+        st.rerun()
+
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=220)
+
+    st.markdown(f'<p class="section-header">📋 {t("compliance_title")}</p>', unsafe_allow_html=True)
+
+    # Sections
+    for i in range(1, 7):
+        title_key = f"compliance_sec{i}_title"
+        text_key = f"compliance_sec{i}"
+        st.markdown(f"**{t(title_key)}**")
+        st.markdown(f'<div class="compliance-text">{t(text_key)}</div>', unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown(f'<div class="compliance-text"><strong>{t("compliance_sign")}</strong></div>', unsafe_allow_html=True)
+
+    st.markdown(f'<p class="sig-label">{t("signature")} — {t("sign_here")}</p>', unsafe_allow_html=True)
+    compliance_sig = st_canvas(
+        fill_color="rgba(0, 0, 0, 0)",
+        stroke_width=2,
+        stroke_color="#1b1b1b",
+        background_color="#ffffff",
+        height=120,
+        width=400,
+        drawing_mode="freedraw",
+        key="compliance_sig_canvas",
+    )
+
+    st.caption(f"{t('today')}: {datetime.now().strftime('%B %d, %Y')}")
+
+    st.divider()
+
+    if st.button(t("submit"), type="primary", use_container_width=True, key="submit_btn"):
+        if not _has_signature(compliance_sig):
+            st.warning(t("sig_required"))
+        else:
+            data = st.session_state.get("intake_data", {})
+            data["compliance_signature"] = _signature_to_base64(compliance_sig)
+            if save_intake(data):
+                st.session_state["page"] = "success"
                 st.rerun()
-        with b2:
-            lang = st.session_state.get("lang", "en")
-            if st.button(t("lang_toggle"), key="intake_lang"):
-                st.session_state["lang"] = "es" if lang == "en" else "en"
-                st.rerun()
 
-        st.markdown('<div class="intake-card">', unsafe_allow_html=True)
-        show_logo()
-        st.markdown(f"### 🩺 {t('intake_title')}")
 
-        # Personal Information
-        st.markdown(f"**{t('personal_info')}**")
-        c1, c2 = st.columns(2)
-        with c1:
-            first_name = st.text_input(t("first_name"), key="intake_first")
-        with c2:
-            last_name = st.text_input(t("last_name"), key="intake_last")
-
-        email = st.text_input(t("email"), key="intake_email")
-
-        c3, c4 = st.columns(2)
-        with c3:
-            phone = st.text_input(t("phone"), key="intake_phone")
-        with c4:
-            dob = st.text_input(t("dob"), placeholder="MM/DD/YYYY", key="intake_dob")
-
-        c5, c6 = st.columns(2)
-        with c5:
-            weight = st.text_input(t("weight"), key="intake_weight")
-        with c6:
-            height = st.text_input(t("height"), key="intake_height")
-
-        st.divider()
-
-        # Medical Briefing
-        st.markdown(f"**{t('medical')}**")
-        pacemaker = st.checkbox(t("q_pacemaker"), key="intake_pacemaker")
-        conditions = st.checkbox(t("q_conditions"), key="intake_conditions")
-        medications = st.checkbox(t("q_medications"), key="intake_medications")
-        procedures = st.checkbox(t("q_procedures"), key="intake_procedures")
-        smokes = st.checkbox(t("q_smokes"), key="intake_smokes")
-
-        st.divider()
-
-        # Additional Information
-        st.markdown(f"**{t('additional')}**")
-        health_concerns = st.text_area(t("health_concerns"), key="intake_concerns", height=120)
-
-        st.divider()
-
-        # Consent
-        consent = st.checkbox(t("consent"), key="intake_consent")
-
-        # Submit
-        if st.button(t("submit"), type="primary", use_container_width=True, key="intake_submit"):
-            if not first_name.strip() or not last_name.strip() or not email.strip():
-                st.error(t("required"))
-            elif not consent:
-                st.warning(t("consent_required"))
-            else:
-                data = {
-                    "first_name": first_name.strip().title(),
-                    "last_name": last_name.strip().title(),
-                    "full_name": f"{first_name.strip().title()} {last_name.strip().title()}",
-                    "email": email.strip(),
-                    "phone": phone.strip(),
-                    "dob": dob.strip(),
-                    "weight": weight.strip(),
-                    "height": height.strip(),
-                    "pacemaker": pacemaker,
-                    "conditions": conditions,
-                    "medications": medications,
-                    "procedures": procedures,
-                    "smokes": smokes,
-                    "health_concerns": health_concerns.strip(),
-                    "lang": st.session_state.get("lang", "en"),
-                }
-                if save_intake(data):
-                    st.success(t("success"))
-                    st.balloons()
-
-        st.markdown('</div>', unsafe_allow_html=True)
+# -----------------------------
+# Success Page
+# -----------------------------
+def render_success_page():
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=220)
+    st.success(t("success"))
+    st.balloons()
 
 
 # -----------------------------
@@ -347,16 +446,16 @@ def main():
     if "lang" not in st.session_state:
         st.session_state["lang"] = "en"
     if "page" not in st.session_state:
-        st.session_state["page"] = "landing"
+        st.session_state["page"] = "intake"
 
-    page = st.session_state.get("page", "landing")
+    page = st.session_state.get("page", "intake")
 
-    if page == "intake":
-        render_intake_form()
-    elif page == "rep":
-        render_rep_page()
+    if page == "compliance":
+        render_compliance_page()
+    elif page == "success":
+        render_success_page()
     else:
-        render_landing()
+        render_intake_page()
 
 
 if __name__ == "__main__":

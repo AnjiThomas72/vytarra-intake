@@ -1,0 +1,260 @@
+from __future__ import annotations
+import os
+import json
+import base64
+from datetime import datetime, timezone
+from pathlib import Path
+
+import streamlit as st
+from streamlit_drawable_canvas import st_canvas
+
+# -----------------------------
+# Config
+# -----------------------------
+BASE_DIR = Path(__file__).resolve().parent
+LOGO_PATH = BASE_DIR / "assets" / "logo.png"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+st.set_page_config(
+    page_title="VYTARRA™ Intake",
+    page_icon="🟢",
+    layout="centered",
+    initial_sidebar_state="collapsed",
+)
+
+# -----------------------------
+# CSS
+# -----------------------------
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    .stApp {
+        background: linear-gradient(160deg, #d4e0cc 0%, #eef4e6 20%, #c8d8bc 40%, #e8f0de 60%, #d0dcc6 80%, #eaf2e4 100%);
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+    }
+    .intake-card {
+        background: rgba(255,255,255,0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 30px 40px;
+        margin: 20px auto;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    }
+    .section-title {
+        color: #1f4e79;
+        font-size: 18px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #5a8a5a;
+    }
+    .compliance-text {
+        background: #f8fafb;
+        border-left: 4px solid #1f4e79;
+        border-radius: 10px;
+        padding: 16px 20px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        line-height: 1.7;
+        color: #1a1a2e;
+    }
+    .sig-label {
+        font-weight: 700;
+        color: #1f4e79;
+        margin-bottom: 4px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# -----------------------------
+# Database
+# -----------------------------
+def _pg_conn():
+    import psycopg2
+    return psycopg2.connect(DATABASE_URL)
+
+
+def _ensure_intake_table():
+    if not DATABASE_URL:
+        return
+    try:
+        with _pg_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS client_intake (
+                        id SERIAL PRIMARY KEY,
+                        first_name TEXT NOT NULL,
+                        last_name TEXT NOT NULL,
+                        full_name TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        phone TEXT,
+                        date_of_birth TEXT,
+                        weight_kg TEXT,
+                        height_cm TEXT,
+                        has_pacemaker BOOLEAN DEFAULT FALSE,
+                        has_conditions BOOLEAN DEFAULT FALSE,
+                        takes_medications BOOLEAN DEFAULT FALSE,
+                        recent_procedures BOOLEAN DEFAULT FALSE,
+                        smokes_or_drinks BOOLEAN DEFAULT FALSE,
+                        health_concerns TEXT,
+                        intake_signature TEXT,
+                        compliance_signature TEXT,
+                        claimed_by TEXT,
+                        claimed_at TEXT,
+                        created_at TEXT NOT NULL,
+                        lang TEXT DEFAULT 'en'
+                    )
+                """)
+                # Add signature columns if they don't exist
+                for col in ["intake_signature", "compliance_signature"]:
+                    cur.execute(f"ALTER TABLE client_intake ADD COLUMN IF NOT EXISTS {col} TEXT")
+            conn.commit()
+    except Exception:
+        pass
+
+
+def save_intake(data: dict) -> bool:
+    if not DATABASE_URL:
+        st.error("Database not configured.")
+        return False
+    _ensure_intake_table()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        with _pg_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO client_intake (
+                        first_name, last_name, full_name, email, phone,
+                        date_of_birth, weight_kg, height_cm,
+                        has_pacemaker, has_conditions, takes_medications,
+                        recent_procedures, smokes_or_drinks,
+                        health_concerns, intake_signature, compliance_signature,
+                        created_at, lang
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (
+                    data["first_name"], data["last_name"], data["full_name"],
+                    data["email"], data.get("phone", ""),
+                    data.get("dob", ""), data.get("weight", ""), data.get("height", ""),
+                    data.get("pacemaker", False), data.get("conditions", False),
+                    data.get("medications", False), data.get("procedures", False),
+                    data.get("smokes", False), data.get("health_concerns", ""),
+                    data.get("intake_signature", ""), data.get("compliance_signature", ""),
+                    now, data.get("lang", "en"),
+                ))
+            conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"Error saving: {e}")
+        return False
+
+
+# -----------------------------
+# Translations
+# -----------------------------
+T = {
+    "en": {
+        "intake_title": "Scanner Intake Form",
+        "personal_info": "Personal Information",
+        "first_name": "First Name",
+        "last_name": "Last Name",
+        "email": "E-Mail for Results",
+        "phone": "Phone Number",
+        "dob": "Date of Birth",
+        "weight": "Weight (kg)",
+        "height": "Height (cm)",
+        "medical": "Medical Briefing",
+        "q_pacemaker": "Do you have a pacemaker?",
+        "q_conditions": "Do you have any existing health conditions or diagnoses?",
+        "q_medications": "Are you taking any medications or supplements?",
+        "q_procedures": "Have you recently undergone any medical procedures or surgeries?",
+        "q_smokes": "Do you smoke or consume alcohol regularly?",
+        "additional": "Additional Information",
+        "health_concerns": "What are your main health concerns or goals for this scan?",
+        "signature": "Signature",
+        "sig_instruction": "Sign below with your finger or mouse",
+        "clear_sig": "Clear Signature",
+        "consent_text": "I am aware that it is my duty to submit truthful information. I agree to the terms of service, and am aware that this scan is an alternative wellness tool and not meant for medical diagnosis.",
+        "next_btn": "Next — Compliance Agreement",
+        "compliance_title": "Compliance and Agreement",
+        "compliance_subtitle": "Quantum Bio-Resonance Scanner",
+        "section_1_title": "I. Acknowledgment of Intent and Scope of Use",
+        "section_1": "By signing this agreement, the Buyer affirms that the Quantum Bio-Resonance Scanner is acquired for personal wellness monitoring, experimental insight, or private holistic practices, and not as a substitute for certified medical diagnostics, prescriptions, or emergency care. Buyer understands that no claims are made by the seller or by Vital Health Global LLC regarding the cure, treatment, or diagnosis of any disease.",
+        "section_2_title": "II. Non-Medical Device Declaration",
+        "section_2": "The Buyer fully understands that the product is not classified as a Class I, II, or III medical device under any FDA, COFEPRIS, EMA, or global equivalent medical regulation framework. The scanner operates using proprietary algorithms and frequency analytics that fall under the category of biofeedback wellness tools, and its outcomes are to be interpreted subjectively and with informed discretion.",
+        "section_3_title": "III. Responsibility and Liability",
+        "section_3": "The Buyer releases the Seller, Vital Health Global LLC, its affiliates, and technology partners from any and all liability arising from misuse, misinterpretation, or misrepresentation of the scanner's outputs. Buyer agrees not to hold Vital Health or its partners accountable for any wellness decisions, supplement intake, lifestyle changes, or therapeutic pathways chosen post-scan.",
+        "section_4_title": "IV. Use Certification and Intellectual Handling",
+        "section_4": "The Buyer acknowledges that the device is best operated by individuals trained in frequency interpretation, energy resonance frameworks, or allied biofield disciplines. Buyer further agrees to abstain from reselling the device with medical promises or unsubstantiated claims and understands that any form of public advertising must state clearly: 'Not a medical device.'",
+        "section_5_title": "V. Data and Privacy Note",
+        "section_5": "Any personal scan data collected remains under the sole custodianship of the Buyer unless explicitly shared. The scanner may log session data internally for performance tracking, but this information is never uploaded, harvested, or sold without direct consent.",
+        "section_6_title": "VI. Final Clause — Informed Autonomy",
+        "section_6": "The Buyer declares full understanding that this device is a tool for exploration, not a determinant of truth, and enters this agreement with conscious autonomy and sovereign discernment. Vital Health Global LLC disclaims any liability arising from independent usage or interpretations not aligned with its official literature or training guidelines.",
+        "compliance_sig": "Signature — Compliance Agreement",
+        "submit": "Submit Intake Form",
+        "success": "Thank you! Your intake form has been submitted successfully. Your representative will be with you shortly.",
+        "required": "Please fill in your first name, last name, and email.",
+        "sig_required": "Please sign both the intake form and the compliance agreement.",
+        "back": "← Back to Intake Form",
+        "lang_toggle": "ES",
+        "todays_date": "Today's Date",
+    },
+    "es": {
+        "intake_title": "Formulario de Ingreso del Escáner",
+        "personal_info": "Información Personal",
+        "first_name": "Nombre",
+        "last_name": "Apellido",
+        "email": "Correo Electrónico para Resultados",
+        "phone": "Número de Teléfono",
+        "dob": "Fecha de Nacimiento",
+        "weight": "Peso (kg)",
+        "height": "Altura (cm)",
+        "medical": "Información Médica",
+        "q_pacemaker": "¿Tiene un marcapasos?",
+        "q_conditions": "¿Tiene alguna condición de salud o diagnóstico existente?",
+        "q_medications": "¿Está tomando algún medicamento o suplemento?",
+        "q_procedures": "¿Se ha sometido recientemente a algún procedimiento médico o cirugía?",
+        "q_smokes": "¿Fuma o consume alcohol regularmente?",
+        "additional": "Información Adicional",
+        "health_concerns": "¿Cuáles son sus principales preocupaciones de salud u objetivos para este escaneo?",
+        "signature": "Firma",
+        "sig_instruction": "Firme abajo con su dedo o ratón",
+        "clear_sig": "Borrar Firma",
+        "consent_text": "Soy consciente de que es mi deber enviar información veraz. Acepto los términos de servicio y soy consciente de que este escaneo es una herramienta de bienestar alternativa y no está destinado para diagnóstico médico.",
+        "next_btn": "Siguiente — Acuerdo de Cumplimiento",
+        "compliance_title": "Cumplimiento y Acuerdo",
+        "compliance_subtitle": "Escáner Cuántico de Bio-Resonancia",
+        "section_1_title": "I. Reconocimiento de Intención y Alcance de Uso",
+        "section_1": "Al firmar este acuerdo, el Comprador afirma que el Escáner Cuántico de Bio-Resonancia se adquiere para monitoreo personal de bienestar, perspectiva experimental o prácticas holísticas privadas, y no como sustituto de diagnósticos médicos certificados, prescripciones o atención de emergencia.",
+        "section_2_title": "II. Declaración de Dispositivo No Médico",
+        "section_2": "El Comprador entiende completamente que el producto no está clasificado como dispositivo médico Clase I, II o III bajo ningún marco regulatorio médico equivalente.",
+        "section_3_title": "III. Responsabilidad y Obligación",
+        "section_3": "El Comprador libera al Vendedor, Vital Health Global LLC, sus afiliados y socios tecnológicos de toda responsabilidad derivada del mal uso, mala interpretación o tergiversación de los resultados del escáner.",
+        "section_4_title": "IV. Certificación de Uso y Manejo Intelectual",
+        "section_4": "El Comprador reconoce que el dispositivo es mejor operado por personas capacitadas en interpretación de frecuencias, marcos de resonancia energética o disciplinas de biocampo aliadas.",
+        "section_5_title": "V. Nota de Datos y Privacidad",
+        "section_5": "Cualquier dato personal de escaneo recopilado permanece bajo la custodia exclusiva del Comprador a menos que se comparta explícitamente.",
+        "section_6_title": "VI. Cláusula Final — Autonomía Informada",
+        "section_6": "El Comprador declara plena comprensión de que este dispositivo es una herramienta de exploración, no un determinante de verdad, y entra en este acuerdo con autonomía consciente y discernimiento soberano.",
+        "compliance_sig": "Firma — Acuerdo de Cumplimiento",
+        "submit": "Enviar Formulario",
+        "success": "¡Gracias! Su formulario ha sido enviado exitosamente. Su representante estará con usted en breve.",
+        "required": "Por favor complete su nombre, apellido y correo electrónico.",
+        "sig_required": "Por favor firme tanto el formulario de ingreso como el acuerdo de cumplimiento.",
+        "back": "← Volver al Formulario",
+        "lang_toggle": "EN",
+        "todays_date": "Fecha de Hoy",
+    },
+}
+
+
+def t(key: str) -> str:
+    lang = st.session_state.get("lang", "en")
+    return T.get(lang, T["en"]).get(key, key)
