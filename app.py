@@ -646,6 +646,8 @@ def render_distributor_page():
         claim_row = st.session_state.pop("pending_claim_row", None)
         if _claim_intake(claim_id, distributor_name):
             st.session_state["claimed_client"] = claim_row
+            st.session_state.pop("dist_results", None)
+            st.session_state.pop("dist_search_term", None)
         else:
             st.error("Could not claim. It may have already been claimed.")
 
@@ -675,6 +677,8 @@ def render_distributor_page():
         st.divider()
         if st.button("🔍 Search Another Client", type="primary", key="search_another"):
             st.session_state.pop("claimed_client", None)
+            st.session_state.pop("dist_results", None)
+            st.session_state.pop("dist_search_term", None)
             st.rerun()
         return
 
@@ -687,15 +691,18 @@ def render_distributor_page():
     with col_all:
         show_all = st.button("Show All Unclaimed", use_container_width=True, key="dist_all_btn")
 
-    rows = []
+    # Persist search results in session state so they survive reruns
     if search_clicked and search.strip():
-        rows = _search_unclaimed(search)
-        if not rows:
-            st.warning(f"No unclaimed intakes found for \"{search}\"")
+        st.session_state["dist_results"] = _search_unclaimed(search)
+        st.session_state["dist_search_term"] = search
     elif show_all:
-        rows = _fetch_all_unclaimed()
-        if not rows:
-            st.info("No unclaimed intakes.")
+        st.session_state["dist_results"] = _fetch_all_unclaimed()
+        st.session_state["dist_search_term"] = "all"
+
+    rows = st.session_state.get("dist_results", [])
+
+    if st.session_state.get("dist_search_term") and not rows:
+        st.warning("No unclaimed intakes found.")
 
     if rows:
         st.caption(f"{len(rows)} result(s)")
