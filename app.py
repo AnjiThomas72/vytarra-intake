@@ -600,6 +600,7 @@ def _render_intake_card(row, distributor_name: str):
     if st.button(f"✅ Claim {row['first_name']} {row['last_name']}", key=btn_key, type="primary"):
         st.session_state["pending_claim_id"] = int(row['id'])
         st.session_state["pending_claim_row"] = dict(row)
+        st.rerun()
 
 
 def render_distributor_page():
