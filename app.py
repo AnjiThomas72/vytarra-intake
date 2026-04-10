@@ -598,11 +598,8 @@ def _render_intake_card(row, distributor_name: str):
 
     btn_key = f"claim_{row['id']}"
     if st.button(f"✅ Claim {row['first_name']} {row['last_name']}", key=btn_key, type="primary"):
-        if _claim_intake(row['id'], distributor_name):
-            st.session_state["claimed_client"] = row
-            st.rerun()
-        else:
-            st.error("Could not claim. It may have already been claimed.")
+        st.session_state["pending_claim_id"] = int(row['id'])
+        st.session_state["pending_claim_row"] = dict(row)
 
 
 def render_distributor_page():
@@ -642,6 +639,15 @@ def render_distributor_page():
 
     distributor_name = st.session_state["dist_name"]
     st.caption(f"Logged in as: {distributor_name}")
+
+    # Process pending claim
+    if "pending_claim_id" in st.session_state:
+        claim_id = st.session_state.pop("pending_claim_id")
+        claim_row = st.session_state.pop("pending_claim_row", None)
+        if _claim_intake(claim_id, distributor_name):
+            st.session_state["claimed_client"] = claim_row
+        else:
+            st.error("Could not claim. It may have already been claimed.")
 
     # Show claimed client confirmation
     claimed = st.session_state.get("claimed_client")
