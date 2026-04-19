@@ -92,63 +92,6 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         font-size: 1.2rem !important;
     }
-    /* Force dark text on all elements — fixes white-on-white on dark mode phones */
-    .stApp, .stApp * {
-        color-scheme: light !important;
-    }
-    .stApp label, .stApp .stMarkdown, .stApp p, .stApp span, .stApp div {
-        color: #1a1a2e !important;
-    }
-    .stApp input, .stApp textarea, .stApp select {
-        color: #1a1a2e !important;
-        background-color: #ffffff !important;
-        border-color: #d0d5dd !important;
-    }
-    .stApp [data-testid="stWidgetLabel"] {
-        color: #1a1a2e !important;
-    }
-    .stApp .stRadio label span {
-        color: #1a1a2e !important;
-    }
-    /* Radio button text and options */
-    .stApp .stRadio div[role="radiogroup"] label {
-        color: #1a1a2e !important;
-    }
-    .stApp .stRadio div[role="radiogroup"] label p {
-        color: #1a1a2e !important;
-    }
-    /* Text input labels and placeholders */
-    .stApp .stTextInput label, .stApp .stTextArea label, .stApp .stNumberInput label {
-        color: #1a1a2e !important;
-    }
-    .stApp input::placeholder {
-        color: #999 !important;
-    }
-    /* Button text */
-    .stApp button {
-        color: #fff !important;
-    }
-    .stApp button[kind="secondary"] {
-        color: #1a1a2e !important;
-    }
-    /* Caption and small text */
-    .stApp .stCaption, .stApp small, .stApp .caption {
-        color: #666 !important;
-    }
-    /* Number input arrows */
-    .stApp .stNumberInput button {
-        color: #1a1a2e !important;
-    }
-    /* Force light background on the whole page for mobile dark mode */
-    html, body {
-        background-color: #eef4e6 !important;
-        color-scheme: light !important;
-    }
-    /* Keep section headers and titles their intended colors */
-    .section-header { color: #1f4e79 !important; }
-    .intake-title { color: #1f4e79 !important; }
-    .sig-label { color: #1f4e79 !important; }
-    .compliance-text { color: #1a1a2e !important; background: #f8fafb !important; }
 </style>
 """, unsafe_allow_html=True)
 
